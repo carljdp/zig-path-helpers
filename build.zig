@@ -5,28 +5,72 @@ pub const Project = struct {
     pub const EntryPoint = "src/main.zig";
 };
 
-const PROJECT_NAME = "zig-path-helpers";
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // STEP: `zig build [install]` (default)
-    const lib = b.addStaticLibrary(.{
+    // ------------------------------------------------------------------------
+    // Compile Steps
+
+    const compileLib = b.addStaticLibrary(.{
         .name = Project.Name,
         .root_source_file = .{ .path = Project.EntryPoint },
         .target = target,
         .optimize = optimize,
     });
-    b.installArtifact(lib);
 
-    // STEP: `zig build test`
-    const main_tests = b.addTest(.{
+    const compileExe = b.addExecutable(.{
+        .name = Project.Name,
         .root_source_file = .{ .path = Project.EntryPoint },
         .target = target,
         .optimize = optimize,
     });
-    const run_main_tests = b.addRunArtifact(main_tests);
-    const test_step = b.step("test", "Run library tests");
-    test_step.dependOn(&run_main_tests.step);
+
+    const compileTests = b.addTest(.{
+        .root_source_file = .{ .path = Project.EntryPoint },
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // ------------------------------------------------------------------------
+    // Install Steps
+
+    const installLib = b.addInstallArtifact(compileLib, .{
+        // default prefix for library is `zig-out/lib`
+    });
+
+    const installExe = b.addInstallArtifact(compileExe, .{
+        // default prefix for executable is `zig-out/bin`
+    });
+
+    // ------------------------------------------------------------------------
+    // Run Steps
+
+    const runExe = b.addRunArtifact(compileExe);
+    runExe.step.dependOn(&installExe.step);
+
+    const runTests = b.addRunArtifact(compileTests);
+    // no need to install for running tests
+
+    // ------------------------------------------------------------------------
+    // Top Level Steps - print via `zig build --list-steps`.
+
+    // `install` (default)
+    b.install_tls.description = "Build & Install (library & executable)";
+    const zigBuildDefault = b.getInstallStep();
+    zigBuildDefault.dependOn(&installLib.step);
+    zigBuildDefault.dependOn(&installExe.step);
+
+    // `test`
+    const zigBuildTest = b.step("test", "Run Tests");
+    zigBuildTest.dependOn(&runTests.step);
+
+    // `run`
+    const zigBuildRun = b.step("run", "Run Executable");
+    zigBuildRun.dependOn(&runExe.step);
+
+    // easter egg :)
+    const zigBuildMeh = b.step("_", "");
+    zigBuildMeh.dependOn(&runExe.step);
+    _ = b.step(" \\_(ツ)_/¯ Meh", "");
 }
